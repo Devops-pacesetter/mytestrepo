@@ -1,0 +1,62 @@
+# Set variables for the organization name and repository name
+$orgName = "your_org_name"
+$repoName = "your_repo_name"
+
+# Set variables for the dev and main branches
+$devBranch = "dev"
+$mainBranch = "main"
+
+# Set variables for the start and end dates for the report (last 30 days)
+$startDate = (Get-Date).AddDays(-30)
+$endDate = Get-Date
+
+# Get the pull requests for the dev and main branches in the last 30 days
+$pullRequests = Invoke-RestMethod -Uri "https://api.github.com/repos/$orgName/$repoName/pulls?state=all&base=$mainBranch&head=$devBranch&since=$startDate&until=$endDate"
+
+# Initialize variables to store the open and merged pull requests
+$openRequests = @()
+$mergedRequests = @()
+
+# Loop through each pull request and add it to the open or merged array as appropriate
+foreach ($pullRequest in $pullRequests) {
+    # Check if the pull request is open
+    if ($pullRequest.state -eq "open") {
+        # Calculate how long the pull request has been open
+        $timeOpen = (Get-Date) - [DateTimeOffset]::Parse($pullRequest.created_at)
+
+        # Add the pull request to the open requests array with the time open
+        $openRequests += [PSCustomObject]@{
+            Title = $pullRequest.title
+            Url = $pullRequest.html_url
+            TimeOpen = $timeOpen.Days
+        }
+    }
+    # Check if the pull request was merged
+    elseif ($pullRequest.state -eq "closed" -and $pullRequest.merged_at) {
+        # Calculate how long the pull request was open before it was merged
+        $timeOpen = [DateTimeOffset]::Parse($pullRequest.merged_at) - [DateTimeOffset]::Parse($pullRequest.created_at)
+
+        # Add the pull request to the merged requests array with the time open
+        $mergedRequests += [PSCustomObject]@{
+            Title = $pullRequest.title
+            Url = $pullRequest.html_url
+            TimeOpen = $timeOpen.Days
+        }
+    }
+}
+
+# Display the number of open and merged pull requests
+Write-Host "Open pull requests: $($openRequests.Count)"
+Write-Host "Merged pull requests: $($mergedRequests.Count)"
+
+# Display a table of open pull requests with the title, URL, and time open
+if ($openRequests.Count -gt 0) {
+    Write-Host "`nOpen pull requests:`n"
+    $openRequests | Format-Table Title, Url, @{Name="Time Open (Days)"; Expression={$_.TimeOpen}}
+}
+
+# Display a table of merged pull requests with the title, URL, and time open
+if ($mergedRequests.Count -gt 0) {
+    Write-Host "`nMerged pull requests:`n"
+    $mergedRequests | Format-Table Title, Url, @{Name="Time Open (Days)"; Expression={$_.TimeOpen}}
+}
